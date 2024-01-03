@@ -1,0 +1,13 @@
+<div class="container-lg",>
+  {{!-- <h6>Search Results for "{{query}}"</h6>  --}}
+  {{#if result.length}}
+    {{#each result}}
+      <div class="bhajans">
+        <h5>{{name}}</h5>
+        <p>{{{Bhajan}}}</p>
+      </div>
+    {{/each}}
+  {{else}}
+    <p>No results found.</p>
+   {{/if}}
+</div>
