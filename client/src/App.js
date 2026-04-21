@@ -1,18 +1,23 @@
-import React, { useState, useEffect } from 'react';
-import { getBhajans, addBhajan, deleteBhajan } from './api';
+import React, { useEffect, useState } from 'react';
+import { getBhajans, addBhajan, deleteBhajan, requestAlternateMatch } from './api';
 import BhajanList from './components/BhajanList';
 import AddBhajan from './components/AddBhajan';
 import BhajanDetail from './components/BhajanDetail';
+import { UI_TEXT } from './utils/bhajanLabels';
+import { normalizeBhajanRecord } from './utils/bhajanRecord';
+import { addPrivateBhajan, deletePrivateBhajan, getPrivateBhajans } from './utils/privateBhajans';
 import './App.css';
 
 function App() {
   const [bhajans, setBhajans] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [view, setView] = useState('list'); // list, add, detail
+  const [view, setView] = useState('list');
   const [selectedBhajan, setSelectedBhajan] = useState(null);
+  const [scriptMode, setScriptMode] = useState('hindi');
 
-  // Fetch bhajans on mount
+  const labels = UI_TEXT[scriptMode];
+
   useEffect(() => {
     fetchBhajans();
   }, []);
@@ -21,10 +26,18 @@ function App() {
     try {
       setLoading(true);
       const response = await getBhajans();
-      setBhajans(response.data.data || []);
+      const publicBhajans = (response.data.data || []).map((bhajan) => ({
+        ...normalizeBhajanRecord(bhajan),
+        visibility: 'public',
+        isPrivate: false
+      }));
+      const privateBhajans = getPrivateBhajans();
+      setBhajans([...privateBhajans, ...publicBhajans]);
       setError(null);
     } catch (err) {
-      setError('Failed to load bhajans. ' + err.message);
+      const privateBhajans = getPrivateBhajans();
+      setBhajans(privateBhajans);
+      setError(`Failed to load public bhajans. ${err.message}`);
       console.error(err);
     } finally {
       setLoading(false);
@@ -34,30 +47,39 @@ function App() {
   const handleAddBhajan = async (newBhajan) => {
     try {
       setLoading(true);
-      await addBhajan(newBhajan);
+      if (newBhajan.visibility === 'private') {
+        addPrivateBhajan(newBhajan);
+      } else {
+        await addBhajan(newBhajan);
+      }
       await fetchBhajans();
       setView('list');
       setError(null);
     } catch (err) {
-      setError('Failed to add bhajan. ' + err.message);
+      setError(`Failed to add bhajan. ${err.message}`);
       console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDeleteBhajan = async (id) => {
-    if (window.confirm('Are you sure you want to delete this bhajan?')) {
+  const handleDeleteBhajan = async (bhajan) => {
+    if (window.confirm(labels.confirmDelete)) {
       try {
         setLoading(true);
-        await deleteBhajan(id);
+        if (bhajan.isPrivate || bhajan.visibility === 'private') {
+          deletePrivateBhajan(bhajan._id);
+        } else {
+          await deleteBhajan(bhajan._id);
+        }
         await fetchBhajans();
-        if (selectedBhajan?._id === id) {
+        if (selectedBhajan?._id === bhajan._id) {
           setView('list');
+          setSelectedBhajan(null);
         }
         setError(null);
       } catch (err) {
-        setError('Failed to delete bhajan. ' + err.message);
+        setError(`Failed to delete bhajan. ${err.message}`);
         console.error(err);
       } finally {
         setLoading(false);
@@ -70,32 +92,66 @@ function App() {
     setView('detail');
   };
 
+  const handleRequestAlternateMatch = async (bhajan) => {
+    if (bhajan.visibility === 'private') {
+      setError('Private bhajans can use the saved original text, but trusted-source matching is only available for server-saved public bhajans right now.');
+      return;
+    }
+
+    try {
+      await requestAlternateMatch(bhajan._id);
+      await fetchBhajans();
+      setError(null);
+    } catch (err) {
+      setError(`Failed to queue alternate lyrics search. ${err.message}`);
+      console.error(err);
+    }
+  };
+
   return (
     <div className="app">
       <header className="header">
-        <h1>🙏 Bhajanawali</h1>
-        <p className="subtitle">Bhajan Management App</p>
+        <h1>{labels.title}</h1>
+        <p className="subtitle">{labels.subtitle}</p>
+        <div className="script-toggle" role="tablist" aria-label="Script toggle">
+          <button
+            type="button"
+            className={`script-toggle-btn ${scriptMode === 'hindi' ? 'active' : ''}`}
+            onClick={() => setScriptMode('hindi')}
+          >
+            Hindi
+          </button>
+          <button
+            type="button"
+            className={`script-toggle-btn ${scriptMode === 'hinglish' ? 'active' : ''}`}
+            onClick={() => setScriptMode('hinglish')}
+          >
+            Hinglish
+          </button>
+        </div>
       </header>
 
       {error && (
         <div className="error-banner">
           <span>{error}</span>
-          <button onClick={() => setError(null)}>✕</button>
+          <button onClick={() => setError(null)} aria-label="Dismiss error">
+            x
+          </button>
         </div>
       )}
 
       <nav className="nav">
-        <button 
+        <button
           className={`nav-btn ${view === 'list' ? 'active' : ''}`}
           onClick={() => setView('list')}
         >
-          📚 Bhajans
+          {labels.list}
         </button>
-        <button 
+        <button
           className={`nav-btn ${view === 'add' ? 'active' : ''}`}
           onClick={() => setView('add')}
         >
-          ➕ Add New
+          {labels.add}
         </button>
       </nav>
 
@@ -103,26 +159,30 @@ function App() {
         {loading && <div className="loading">Loading...</div>}
 
         {view === 'list' && !loading && (
-          <BhajanList 
+          <BhajanList
             bhajans={bhajans}
             onSelectBhajan={handleSelectBhajan}
             onRefresh={fetchBhajans}
+            scriptMode={scriptMode}
           />
         )}
 
         {view === 'add' && (
-          <AddBhajan 
+          <AddBhajan
             onSave={handleAddBhajan}
             onCancel={() => setView('list')}
+            scriptMode={scriptMode}
           />
         )}
 
         {view === 'detail' && selectedBhajan && (
-          <BhajanDetail 
+          <BhajanDetail
             bhajan={selectedBhajan}
-            onDelete={() => handleDeleteBhajan(selectedBhajan._id)}
+            onDelete={() => handleDeleteBhajan(selectedBhajan)}
             onBack={() => setView('list')}
             onRefresh={fetchBhajans}
+            onRequestAlternateMatch={() => handleRequestAlternateMatch(selectedBhajan)}
+            scriptMode={scriptMode}
           />
         )}
       </main>

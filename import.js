@@ -1,10 +1,15 @@
+require('./loadEnv')();
 const mongoose = require('mongoose');
 const bhajanModel = require('./models/bhajanSchema.js');
-const connectToMongo = require('./db.js');
+const { connectToMongo, getDbState } = require('./db.js');
 const bhajans = require('./Bhajanawali.bhajans.json');
 
 connectToMongo().then(async () => {
     try {
+        if (!getDbState().connected) {
+            throw new Error('MongoDB is not connected. Set MONGODB_URI in the root .env file before importing.');
+        }
+
         // Clear existing data
         await bhajanModel.deleteMany({});
         console.log('Cleared existing data');

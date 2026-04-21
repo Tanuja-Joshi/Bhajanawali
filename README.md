@@ -127,7 +127,58 @@ To import bhajans from JSON file:
 
 ## Database
 
-This app uses MongoDB Atlas (cloud database). The connection string is stored in `db.js`.
+This app now supports two storage modes:
+
+- **MongoDB mode:** set `MONGODB_URI` in a root `.env` file
+- **Local fallback mode:** if `MONGODB_URI` is missing or MongoDB is unreachable, the app serves and edits bhajans from a local JSON file under `data/bhajans.local.json`
+
+Create a root `.env` file if you want MongoDB:
+
+```powershell
+cd C:\Tanuja\Bhajanawali
+Copy-Item .env.example .env
+```
+
+Then set:
+
+```env
+MONGODB_URI=your-mongodb-connection-string
+PORT=3000
+```
+
+## Alternate Lyrics Matching
+
+The app can now queue a background lookup for the alternate script after a bhajan is saved.
+
+- User-entered text is always kept as the trusted original
+- Alternate lyrics are stored separately with a status such as `queued`, `searching`, `matched`, or `needs_search`
+- The first trusted source is a curated local registry at `data/trustedLyricsRegistry.json`
+
+Each registry entry should look like:
+
+```json
+[
+  {
+    "title": "Ram aayenge",
+    "aliases": ["Ram Aayenge", "Awadh mein Ram aayenge"],
+    "source": "manual_review",
+    "hindi": {
+      "name": "राम आएंगे",
+      "lyrics": "..."
+    },
+    "hinglish": {
+      "name": "Ram aayenge",
+      "lyrics": "..."
+    }
+  }
+]
+```
+
+You can manually re-trigger matching for a bhajan with:
+
+```powershell
+Invoke-WebRequest -Method Post -UseBasicParsing http://localhost:3000/api/bhajans/<id>/match-alternate
+```
 
 ## Mobile App Features
 
@@ -160,8 +211,9 @@ This app uses MongoDB Atlas (cloud database). The connection string is stored in
 - Kill existing processes: `Get-Process node | Stop-Process -Force`
 
 **Issue: MongoDB connection error**
-- Check MongoDB Atlas credentials in `db.js`
-- Ensure IP is whitelisted in Network Access
+- Check `MONGODB_URI` in your root `.env`
+- Ensure Atlas credentials are valid and your IP is whitelisted
+- The app will fall back to local JSON storage if MongoDB is unavailable
 
 **Issue: CORS errors**
 - CORS is enabled in the backend
