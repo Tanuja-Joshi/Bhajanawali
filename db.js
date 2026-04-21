@@ -1,5 +1,5 @@
 const mongoose=require('mongoose')
-const DB_URI='mongodb://0.0.0.0:27017/Bhajanawali'
+const DB_URI='mongodb+srv://TanujaJoshi:Welcome%402601@cluster0.gzkjokk.mongodb.net/?appName=Cluster0'
 
 const connectToMongo=async()=>{
     try{
